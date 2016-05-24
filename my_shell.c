@@ -139,7 +139,6 @@ char** decouper(char* commande, char** cmdDecoupee)
 		}
 		else if(commande[i] != ' ')
 		{
-			fprintf(stderr, "THETEST : %c\n", commande[i]);
 			cmdDecoupee[j][k] = commande[i];
 			++k;
 			++i;
@@ -165,10 +164,10 @@ void parseCommande(char* commande, char** history)
     ssize_t n;
     FILE* fichier;
     char* nomFichier;
+    int estInterne = 0;
     
     //char* buffer = (char*)malloc(TAILLE_MAX_COMMANDE*sizeof(char));
     int nPipe = 0;
-    fprintf(stderr, "commande = |%s|\n", commande);
     
     for(i=0; commande[i] != '\0'; i++){
         if(commande[i]=='|')
@@ -199,9 +198,8 @@ void parseCommande(char* commande, char** history)
 		
     }
 
-    if(redirige == 2)
+    if(redirige == 2) // redirecton <
     {
-
 	if((fichier = fopen(nomFichier, "r")) == NULL)
 	{
 	    fprintf(stderr, "Erreur d'ouverture ou de création du fichier\n");
@@ -223,7 +221,6 @@ void parseCommande(char* commande, char** history)
 	commande[i] = '\0';
     }
 	
-    fprintf(stderr, "MoiTEST : |%s|\n", commande);
     char** miniCmd = (char**)malloc(sizeof(char*) * (1+nPipe));
     for(i=0; i<nPipe+1; i++)
         miniCmd[i] = (char*)malloc(sizeof(char)*TAILLE_MAX_COMMANDE);
@@ -246,19 +243,48 @@ void parseCommande(char* commande, char** history)
     }
 	miniCmd[j][k] = '\0';
 
+    if(nPipe == 0){
+	char** cmdDecoupee = NULL;
+	cmdDecoupee = decouper(commande, cmdDecoupee);
+	if((strcmp(cmdDecoupee[0], "exit") == 0) || (strcmp(cmdDecoupee[0], "quit") == 0))
+	{
+	    free(cmdDecoupee);
+	    free(miniCmd[0]);
+	    free(miniCmd);
+	    if(redirige != 0)
+		free(nomFichier);
+	    if(redirige == 2)
+		fclose(fichier);
+	    exit(EXIT_SUCCESS);
+	}
+	if((strcmp(cmdDecoupee[0], "cd") == 0))
+	{
+	    DIR* repertoire;
+	    if(cmdDecoupee[1]== NULL)	/*Si l'utilisateur a oublié un parametre*/
+	    {
+		fprintf(stderr, "Il manque un parametre à cette fonction!\n");
+		free(cmdDecoupee);
+		return;
+	    }
+	    cd(cmdDecoupee[1], repertoire);
+	    return;
+	}
+    }
+	
     
-fprintf(stderr, "TEST : %d\n", nPipe);
     for(i=0; i<nPipe+1; i++)
     {
         int tuyau[2];
-        int truc;
+        int redir;
+	int estInterne = 0;
         pipe(tuyau);
         int pid = fork();
 	
+
         if(pid == 0)
         {
 	
-	dup2(truc, STDIN_FILENO);
+	dup2(redir, STDIN_FILENO);
 	if(i!=nPipe){
 	    dup2(tuyau[1], STDOUT_FILENO);
 	}
@@ -283,32 +309,25 @@ fprintf(stderr, "TEST : %d\n", nPipe);
 	}
 	
 	close(tuyau[0]);
-	int estInterne = 0;
+	estInterne = 0;
         estInterne = executer_commande(miniCmd[i], history);
-if(redirige != 0) 
-	fclose(fichier);
-	if(estInterne == 1)
+	if(redirige != 0) 
+	    fclose(fichier);
+	if(estInterne != 0)
+	{
 	    exit(EXIT_SUCCESS);
-	/*if(redirige == 1 && i==nPipe){
-	    dup2(fileno(fichier), STDOUT_FILENO);
 	}
-	else if(i!=nPipe)
-	    dup2(truc, STDIN_FILENO);
-	close(tuyau[1]);
-	fprintf(stderr, "TEST : %s, %d\n", miniCmd[i], i);
-        executer_commande(miniCmd[i], history);
-	fprintf(stderr, "YOOO\n");*/
     }
 
     else
     {
         do
         {
-    
+  	    if(estInterne == -1)
+		exit(EXIT_SUCCESS);
             waitpid(-1, &status, 0);
-
             if (WIFEXITED(status)) {
-                fprintf(stderr, "terminé, code=%d\n", WEXITSTATUS(status));
+                //fprintf(stderr, "terminé, code=%d\n", WEXITSTATUS(status));
             }
 	    else if (WIFSIGNALED(status)) {
                 fprintf(stderr, "tué par le signal %d\n", WTERMSIG(status));
@@ -321,31 +340,27 @@ if(redirige != 0)
             }
         }while (!WIFEXITED(status) && !WIFSIGNALED(status));
 	close(tuyau[1]);
-	truc = tuyau[0];
+	redir = tuyau[0];
     }
     }
     for(i=0; i<nPipe+1; i++)
         free(miniCmd[i]);
     free(miniCmd);
-    if(redirige == 1)
+    if(redirige != 0)
     {
 	free(nomFichier);
     }
 
-    sleep(1);
+    /*sleep(1);*/
+    fprintf(stdout, "\n");
 }
 
 
 int executer_commande(char* commande, char** history)
 {
 	char** cmdDecoupee = NULL;
-    //fprintf(stderr, "TESTCOMMANDE = |%s|\n", commande);
 	cmdDecoupee = decouper(commande, cmdDecoupee);
 	DIR* repertoire;
-
-fprintf(stderr, "TESTERROR1 |%s|\n", cmdDecoupee[0]);
-	fprintf(stderr, "TESTERROR1 |%s|\n", cmdDecoupee[1]);
-	/*fprintf(stdout, "TESTERROR |%s|\n", cmdDecoupee[2]);*/
 
 	if(cmdDecoupee[0][0] == '!' && cmdDecoupee[0][1] != '\0')
 	{
@@ -376,28 +391,7 @@ fprintf(stderr, "TESTERROR1 |%s|\n", cmdDecoupee[0]);
 		}
 	}
 
-    else if(strcmp(cmdDecoupee[0], "cd") == 0)
-    {
-		if(cmdDecoupee[1]== NULL)										/*Si l'utilisateur a oublié un parametre*/
-		{
-			fprintf(stderr, "Il manque un parametre à cette fonction!\n");
-			free(cmdDecoupee);
-			return 1;
-		}
-        cd(cmdDecoupee[1], repertoire);
-        free(cmdDecoupee);
-        return 1;
-    }
 
-    else if(strcmp(cmdDecoupee[0], "exit") == 0)
-    {
-        printf("Exiting Shell\n\n");											/*Si on quitte on doit tout libérer!!*/
-        free(commande);
-        free(history);
-        free(cmdDecoupee);
-        exit(0);
-        return 1;
-    }
 
     else if(strcmp(cmdDecoupee[0], "copy") == 0)
     {
@@ -503,7 +497,7 @@ int historyCmd(char* commande, char** cmdDecoupee, char** history)
 	}
 	else if(atoi(cmdDecoupee[1])>0 && atoi(cmdDecoupee[1])<compteurCommandeHistorique)
 	{
-		for(j=compteurCommandeHistorique - atoi(cmdDecoupee[1])-1; history[j][0] != '\0' && j<compteurCommandeHistorique-1; ++j)
+		for(j=compteurCommandeHistorique - atoi(cmdDecoupee[1])-1; history[j+1][0] != '\0' && j<compteurCommandeHistorique-1; ++j)
 			fprintf(stdout, "%d : %s\n", j, history[j]);
 	}
 	else
@@ -523,11 +517,13 @@ void cd(char* finchemin, DIR* repertoire){
     {
         strcat(chemincourant, "/");
         chdir(strcat(chemincourant, finchemin));
+
+	return;
     }
     else
     {
-        printf("fatality\n");
-        exit(EXIT_SUCCESS);
+        fprintf(stderr, "fatality\n");
+        return;
     }
 }
 
@@ -535,7 +531,7 @@ void cd(char* finchemin, DIR* repertoire){
 void touch(char** cmdDecoupee)											/*On a vérifié avant que le deuxième paramètre au moins n'étais pas nul*/
 {
 	int file, nbArg=0, nbOpt=0, i=0, mod=0;
-	int continuer =1;
+	int continuer = 1;
 	time_t timeStamp = time(NULL);
 
 	while(continuer==1)
@@ -712,6 +708,7 @@ char* findPath(char* commande) //Retourne le chemin vers la commande demandée e
 	free(ligne);
 	free(fichier);
 	free(token);
+	fprintf(stderr, "Erreur, commande inconnue...\n");
 	return " "; //En cas d'erreur, une commande vide.
 }
 
@@ -734,7 +731,6 @@ int main(int argc, char *argv[])
 	{
 		
 		invite_commande();
-	    fprintf(stderr, "YOGA : \n");
 		lire_commande(commande);
 		addHistory(commande, history);
 		parseCommande(commande, history);
