@@ -544,7 +544,7 @@ void touch(char** cmdDecoupee)											/*On a vérifié avant que le deuxième
 	}
 	--nbArg;
 	fprintf(stderr, "Sorti de arg, %s\n", cmdDecoupee[nbArg]);
-	file = open(cmdDecoupee[nbArg], O_WRONLY | O_CREAT);				/*On créé le fichier s'il n'existe pas*/
+	file = open(cmdDecoupee[nbArg], O_WRONLY | O_CREAT, 0777);				/*On créé le fichier s'il n'existe pas*/
 	if(file == -1)
 	{
 		fprintf(stderr, "L'ouverture du fichier destinataire a echoue\n");
