@@ -174,7 +174,7 @@ void parseCommande(char* commande, char** history)
             ++nPipe;
 	if(commande[i] == '>' || commande[i] == '<')
 	{
-	    nomFichier = (char*)malloc(sizeof(char)*TAILLE_MAX_NOM_FICHIER);
+	    nomFichier = (char*)calloc(TAILLE_MAX_NOM_FICHIER, sizeof(char));
 	    j=0;
 	    if(commande[i] == '>')
 		redirige = 1;
@@ -198,8 +198,10 @@ void parseCommande(char* commande, char** history)
 		
     }
 
+
     if(redirige == 2) // redirecton <
     {
+
 	if((fichier = fopen(nomFichier, "r")) == NULL)
 	{
 	    fprintf(stderr, "Erreur d'ouverture ou de création du fichier\n");
@@ -241,7 +243,7 @@ void parseCommande(char* commande, char** history)
             k++;
         }
     }
-	miniCmd[j][k] = '\0';
+    miniCmd[j][k] = '\0';
 
     if(nPipe == 0){
 	char** cmdDecoupee = NULL;
@@ -260,6 +262,12 @@ void parseCommande(char* commande, char** history)
 	if((strcmp(cmdDecoupee[0], "cd") == 0))
 	{
 	    DIR* repertoire;
+	    free(miniCmd[0]);
+	    free(miniCmd);
+	    if(redirige != 0)
+		free(nomFichier);
+	    if(redirige == 2)
+		fclose(fichier);
 	    if(cmdDecoupee[1]== NULL)	/*Si l'utilisateur a oublié un parametre*/
 	    {
 		fprintf(stderr, "Il manque un parametre à cette fonction!\n");
@@ -267,6 +275,7 @@ void parseCommande(char* commande, char** history)
 		return;
 	    }
 	    cd(cmdDecoupee[1], repertoire);
+	    free(cmdDecoupee);
 	    return;
 	}
     }
@@ -280,68 +289,65 @@ void parseCommande(char* commande, char** history)
         pipe(tuyau);
         int pid = fork();
 	
-
         if(pid == 0)
         {
+		dup2(redir, STDIN_FILENO);
+		if(i!=nPipe)
+		{
+	    		dup2(tuyau[1], STDOUT_FILENO);
+		}
+		else if(redirige == 1)
+		{
+		    if((fichier = fopen(nomFichier, "w")) == NULL)
+		    {
+		        fprintf(stderr, "Erreur d'ouverture ou de création du fichier\n");
+		        return;
+		    }  
+		    dup2(fileno(fichier), STDOUT_FILENO);
+		}
+        	else if(redirige == 3)
+		{
+	    		if((fichier = fopen(nomFichier, "a+")) == NULL)
+	    		{
+	        		fprintf(stderr, "Erreur d'ouverture ou de création du fichier\n");
+	        		return;
+	    		}  
+	    		dup2(fileno(fichier), STDOUT_FILENO);
+		}
 	
-	dup2(redir, STDIN_FILENO);
-	if(i!=nPipe){
-	    dup2(tuyau[1], STDOUT_FILENO);
-	}
-	else if(redirige == 1){
-	    if((fichier = fopen(nomFichier, "w")) == NULL)
-	    {
-	        fprintf(stderr, "Erreur d'ouverture ou de création du fichier\n");
-	        return;
-	    }  
-	    dup2(fileno(fichier), STDOUT_FILENO);
-	}
-
-	
-
-	else if(redirige == 3){
-	    if((fichier = fopen(nomFichier, "a+")) == NULL)
-	    {
-	        fprintf(stderr, "Erreur d'ouverture ou de création du fichier\n");
-	        return;
-	    }  
-	    dup2(fileno(fichier), STDOUT_FILENO);
-	}
-	
-	close(tuyau[0]);
-	estInterne = 0;
-        estInterne = executer_commande(miniCmd[i], history);
-	if(redirige != 0) 
-	    fclose(fichier);
-	if(estInterne != 0)
-	{
-	    exit(EXIT_SUCCESS);
-	}
-    }
-
-    else
-    {
-        do
-        {
-  	    if(estInterne == -1)
-		exit(EXIT_SUCCESS);
-            waitpid(-1, &status, 0);
-            if (WIFEXITED(status)) {
-                //fprintf(stderr, "terminé, code=%d\n", WEXITSTATUS(status));
-            }
-	    else if (WIFSIGNALED(status)) {
-                fprintf(stderr, "tué par le signal %d\n", WTERMSIG(status));
-            } 
-	    else if (WIFSTOPPED(status)) {
-                fprintf(stderr, "arrêté par le signal %d\n", WSTOPSIG(status));
-            }
-	    else if (WIFCONTINUED(status)) {
-                fprintf(stderr, "relancé\n");
-            }
-        }while (!WIFEXITED(status) && !WIFSIGNALED(status));
-	close(tuyau[1]);
-	redir = tuyau[0];
-    }
+		close(tuyau[0]);
+		estInterne = 0;
+        	estInterne = executer_commande(miniCmd[i], history);
+		if(redirige != 0) 
+		    fclose(fichier);
+		if(estInterne != 0)
+		{
+		    exit(EXIT_SUCCESS);
+		}
+	 }
+    	else
+    	{
+	        do
+	        {
+	  	    if(estInterne == -1)
+			exit(EXIT_SUCCESS);
+	            waitpid(-1, &status, 0);
+	            if (WIFEXITED(status)) {
+	                //fprintf(stderr, "terminé, code=%d\n", WEXITSTATUS(status));
+	            }
+		    else if (WIFSIGNALED(status)) {
+	                fprintf(stderr, "tué par le signal %d\n", WTERMSIG(status));
+	            } 
+		    else if (WIFSTOPPED(status)) {
+	                fprintf(stderr, "arrêté par le signal %d\n", WSTOPSIG(status));
+	            }
+		    else if (WIFCONTINUED(status)) {
+	                fprintf(stderr, "relancé\n");
+	            }
+	        }while (!WIFEXITED(status) && !WIFSIGNALED(status));
+		close(tuyau[1]);
+		redir = tuyau[0];
+    	}
     }
     for(i=0; i<nPipe+1; i++)
         free(miniCmd[i]);
@@ -398,14 +404,18 @@ int executer_commande(char* commande, char** history)
         int test;
         int ca_marche = 1;
         struct stat* origine = malloc(sizeof(struct stat));
-        if(stat(cmdDecoupee[1], origine) == -1){
+        if(stat(cmdDecoupee[1], origine) == -1)
+        {
             printf("Erreur dans la reconnaissance de l'élément d'origine");
             ca_marche = 0;
         }
-        if(S_ISDIR(origine->st_mode)) test = copier_dossier(cmdDecoupee[1], cmdDecoupee[2]);
-        else test = copier_fichier(cmdDecoupee[1], cmdDecoupee[2]);
+        if(S_ISDIR(origine->st_mode)) 
+        	test = copier_dossier(cmdDecoupee[1], cmdDecoupee[2]);
+        else 
+        	test = copier_fichier(cmdDecoupee[1], cmdDecoupee[2]);
 
-        if(test==-1) printf("\nLa copie a echouee.");
+        if(test==-1) 
+        	printf("\nLa copie a echouee.");
 
         free(origine);
         free(cmdDecoupee);
@@ -516,7 +526,8 @@ void cd(char* finchemin, DIR* repertoire){
     if(getcwd(chemincourant, sizeof(chemincourant)) != NULL)
     {
         strcat(chemincourant, "/");
-        chdir(strcat(chemincourant, finchemin));
+        if(chdir(strcat(chemincourant, finchemin)) == -1)
+	    fprintf(stderr, "Dossier introuvable.\n");
 
 	return;
     }
@@ -664,7 +675,7 @@ char* findPath(char* commande) //Retourne le chemin vers la commande demandée e
 	struct dirent* fichier = NULL;
 	while(environ[i] != NULL && !(environ[i][0] == 'P' && environ[i][1] == 'A' && environ[i][2] == 'T' && environ[i][3] == 'H' && environ[i][4] == '='))
 	{
-        i++; //On trouve la ligne du PATH dans les variables d'environnement
+        	i++; //On trouve la ligne du PATH dans les variables d'environnement
 	}
 
 	//On segmente la ligne en virant le début et en découpant selon les ":"
@@ -682,28 +693,28 @@ char* findPath(char* commande) //Retourne le chemin vers la commande demandée e
 		if(rep == NULL)
 		{
             /*printf("Erreur d'ouverture d'un dossier : %s\n", token);*/
-        }
+		 }
 		else
 		{
-            //Les deux readdir inutiles
-            fichier = readdir(rep);
-            fichier = readdir(rep);
-            while((fichier = readdir(rep)) != NULL) //Pour tous les fichiers
-            {
-                if(strcmp(commande, fichier->d_name) == 0) //Quand on a trouvé la commande
-                {
-                    closedir(rep);
-                    free(ligne);
-                    strcpy(copie, token);
-                    strcat(copie, "/");
-                    strcat(copie, commande);
-                    return copie;
-                }
-            }
-
-        }
-        closedir(rep);
-        token = strtok(NULL, ":"); //Passe au prochain chemin du PATH.
+	       	//Les deux readdir inutiles
+	        fichier = readdir(rep);
+	        fichier = readdir(rep);
+	        while((fichier = readdir(rep)) != NULL) //Pour tous les fichiers
+	        {
+	        	if(strcmp(commande, fichier->d_name) == 0) //Quand on a trouvé la commande
+	                {
+	                    closedir(rep);
+	                    free(ligne);
+	                    strcpy(copie, token);
+	                    strcat(copie, "/");
+	                    strcat(copie, commande);
+	                    return copie;
+	                }
+	            }
+	
+		 }
+        	closedir(rep);
+        	token = strtok(NULL, ":"); //Passe au prochain chemin du PATH.
 	}
 	free(ligne);
 	free(fichier);
